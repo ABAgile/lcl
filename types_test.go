@@ -220,7 +220,7 @@ func TestFromPtr(t *testing.T) {
 
 func TestToAnySlice(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		input []int
 		want  []any
 	}{
@@ -236,10 +236,10 @@ func TestToAnySlice(t *testing.T) {
 
 func TestFromAnySlice(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   []any
-		want    []int
-		wantOk  bool
+		name   string
+		input  []any
+		want   []int
+		wantOk bool
 	}{
 		{"all same type", []any{1, 2, 3}, []int{1, 2, 3}, true},
 		{"type mismatch", []any{1, "two", 3}, nil, false},

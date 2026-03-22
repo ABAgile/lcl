@@ -61,7 +61,7 @@ func TestZip3(t *testing.T) {
 
 func TestZip4(t *testing.T) {
 	tests := []struct {
-		name string
+		name       string
 		a, b, c, d []int
 		want       []Tuple4[int, int, int, int]
 	}{
