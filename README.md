@@ -1,4 +1,4 @@
-# lcl
+# lcl - Link Connect Liquid, the "water of life" to acts as a neural interface for mental synchronization...
 
 [![Release](https://img.shields.io/github/v/release/abagile/lcl?sort=semver&logo=Go&color=%23007D9C)](https://github.com/abagile/lcl/releases)
 [![Test](https://github.com/abagile/lcl/actions/workflows/test.yml/badge.svg)](https://github.com/abagile/lcl/actions/workflows/test.yml)
