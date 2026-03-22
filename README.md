@@ -1,5 +1,11 @@
 # lcl
 
+[![Release](https://img.shields.io/github/v/release/abagile/lcl?sort=semver&logo=Go&color=%23007D9C)](https://github.com/abagile/lcl/releases)
+[![Test](https://github.com/abagile/lcl/actions/workflows/test.yml/badge.svg)](https://github.com/abagile/lcl/actions/workflows/test.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/abagile/lcl.svg)](https://pkg.go.dev/github.com/abagile/lcl)
+[![Go Report Card](https://goreportcard.com/badge/github.com/abagile/lcl)](https://goreportcard.com/report/github.com/abagile/lcl)
+[![codecov](https://codecov.io/gh/abagile/lcl/branch/main/graph/badge.svg)](https://codecov.io/gh/abagile/lcl)
+
 A generic Go utility library providing functional-style helpers for slices, math, result handling, and tuple operations.
 
 **Requires Go 1.24+**
