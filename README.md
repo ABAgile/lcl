@@ -418,6 +418,84 @@ changed := Filter(pairs, func(p Tuple2[string, string]) bool {
 
 ---
 
+## workerpool.go — Concurrent job processing
+
+Helpers for running work concurrently without managing goroutines directly.
+
+### `WorkerPool`
+
+A reusable pool that reads jobs from a channel and dispatches them to a fixed number of goroutines. `Run` blocks until the jobs channel is closed and all workers have finished.
+
+```go
+type HandlerFunc[T any] func(ctx context.Context, job T, logger *slog.Logger)
+
+func NewWorkerPool[T any](numWorkers int, jobs <-chan T, handler HandlerFunc[T], logger *slog.Logger) *WorkerPool[T]
+func (p *WorkerPool[T]) Run(ctx context.Context)
+```
+
+Use `WorkerPool` when you need control over the jobs channel lifecycle — for example, when jobs arrive from a long-running stream or message queue:
+
+```go
+jobCh := make(chan Order)
+
+go func() {
+    for order := range messageQueue.Subscribe() {
+        jobCh <- order
+    }
+    close(jobCh)
+}()
+
+handler := func(ctx context.Context, order Order, logger *slog.Logger) {
+    if err := processOrder(ctx, order); err != nil {
+        logger.Error("order failed", "id", order.ID, "err", err)
+    }
+}
+
+wp := lcl.NewWorkerPool(8, jobCh, handler, slog.Default())
+wp.Run(ctx) // blocks until jobCh is closed
+```
+
+### `RunConcurrent`
+
+Runs `fn` concurrently over every element of a slice. Blocks until all jobs are done. Use this when you need side effects but not return values.
+
+```go
+func RunConcurrent[T any](jobs []T, workerCount int, fn func(context.Context, T))
+```
+
+```go
+files := []string{"a.csv", "b.csv", "c.csv"}
+
+lcl.RunConcurrent(files, 4, func(ctx context.Context, path string) {
+    if err := uploadFile(ctx, path); err != nil {
+        log.Printf("upload failed: %s: %v", path, err)
+    }
+})
+```
+
+### `MapConcurrent`
+
+Like `RunConcurrent` but collects results. Output order matches input order regardless of which worker processes which job.
+
+```go
+func MapConcurrent[T any, R any](jobs []T, workerCount int, fn func(context.Context, T) R) []R
+```
+
+```go
+userIDs := []int{1, 2, 3, 4, 5}
+
+profiles := lcl.MapConcurrent(userIDs, 4, func(ctx context.Context, id int) Profile {
+    p, err := fetchProfile(ctx, id)
+    if err != nil {
+        return Profile{} // zero value on failure
+    }
+    return p
+})
+// profiles[0] corresponds to userIDs[0], profiles[1] to userIDs[1], etc.
+```
+
+---
+
 ## Acknowledgements
 
 The slice and iterator utilities in this library are built on top of
