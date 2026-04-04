@@ -418,6 +418,144 @@ changed := Filter(pairs, func(p Tuple2[string, string]) bool {
 
 ---
 
+## log.go — Logging helpers
+
+The logging layer is designed to be **implementation-agnostic at the call site**: all
+application code works against the standard `log/slog` interface.
+[`github.com/phuslu/log`](https://github.com/phuslu/log) is used as the underlying
+engine specifically for its flexible multi-writer pipeline and low-allocation
+structured output, but that choice is an internal detail — swapping it out would
+require no changes to application code.
+
+### Design split
+
+| Layer | Type | Interface |
+|---|---|---|
+| App logger construction | `AppLogger`, `LoggerWithContext` | phuslu `log.Logger` — used at startup only |
+| Log-call sites | `NewAttrsLogger` → `*slog.Logger` | standard `log/slog` |
+| Message annotation | `AttrsHandler` | `slog.Handler` — wraps any handler |
+| Stack capture | `StackFrame` | plain `string` — no logger dependency |
+
+### `AppLogger` — structured app logger with optional NATS fanout
+
+```go
+func AppLogger(app string, nc *nats.Conn, opts ...AppLoggerOption) log.Logger
+```
+
+Constructs a phuslu logger that writes JSON to stdout. When `nc` is non-nil a
+second writer fans out asynchronously to the NATS subject `app_log.<app>` (buffered
+at 200 entries, discards on full). Pass `nil` for a stdout-only logger.
+
+```go
+logger := lcl.AppLogger("myapp", nc,
+    lcl.WithSite("tokyo"),
+    lcl.WithModule("api"),
+    lcl.WithLevel(slog.LevelDebug),
+)
+```
+
+#### Options
+
+| Option | Description |
+|---|---|
+| `WithSite(site string)` | Adds `site` field to every log entry |
+| `WithModule(module string)` | Adds `module` field to every log entry |
+| `WithLevel(level)` | Sets minimum log level; accepts both `slog.Level` and `log.Level` — defaults to `InfoLevel` |
+
+`WithLevel` accepts either scheme transparently:
+
+```go
+lcl.WithLevel(slog.LevelWarn)   // slog constant — no phuslu import needed
+lcl.WithLevel(log.DebugLevel)   // phuslu constant — full range including Trace/Fatal/Panic
+```
+
+slog has no `Fatal` or `Panic` levels by design (see below); those remain
+accessible via the phuslu constant directly when genuinely needed.
+
+### `LoggerWithContext` — derive a child logger with additional context fields
+
+```go
+func LoggerWithContext(l *log.Logger, opts ...AppLoggerOption) *log.Logger
+```
+
+Returns a new logger that shares the parent's writer and level but carries
+additional context fields. Uses the same `AppLoggerOption` set as `AppLogger`:
+
+```go
+requestLogger := lcl.LoggerWithContext(&logger, lcl.WithModule("payment"))
+```
+
+### `AttrsHandler` / `NewAttrsLogger` — human-readable message annotation
+
+`AttrsHandler` is a `slog.Handler` wrapper that appends structured attributes to
+the log message in readable form alongside forwarding them as structured fields to
+the inner handler. Wrap any `slog.Handler`:
+
+```go
+logger := lcl.NewAttrsLogger(slog.NewJSONHandler(os.Stdout, nil))
+logger.With(slog.String("site", "tokyo")).
+    Info("request handled", slog.Int("status", 200), slog.String("path", "/api/v1"))
+// msg: "request handled |>> site: [tokyo], status: [200], path: [/api/v1]"
+// structured fields: site=tokyo status=200 path=/api/v1
+```
+
+Attrs with a `_` key prefix are excluded from the message annotation but still
+forwarded to the inner handler as structured fields — useful for machine-readable
+metadata that would clutter human output:
+
+```go
+logger.Info("query finished",
+    slog.Duration("elapsed", d),
+    slog.String("_trace_id", traceID),  // in structured output only
+)
+```
+
+Group prefixes (from `logger.WithGroup`) apply to structured fields only, not to
+the message annotation, matching standard slog semantics.
+
+### Why slog has no `Fatal` or `Panic` level
+
+This is a deliberate design decision documented in the [slog proposal](https://github.com/golang/go/issues/56345).
+The core argument is that `Fatal` and `Panic` are **control flow**, not log levels:
+
+- `Fatal` calls `os.Exit` — a side effect that belongs to the application, not a logging abstraction. A library that calls `os.Exit` removes the caller's ability to clean up, flush buffers, or handle the exit itself.
+- `Panic` calls `panic()` — if that's what you mean, call `panic` directly. Hiding it inside a log call obscures the control-flow intent from both the reader and the runtime.
+
+Both also break composability: a `slog.Handler` that silently drops records (common in tests) would suppress the exit or panic — a surprising and hard-to-debug outcome.
+
+Go already provides `os.Exit`, `log.Fatal` (stdlib), and `panic` as first-class constructs. The slog authors treated `Fatal`/`Panic` log levels as legacy baggage from older libraries that conflated "record this event" with "terminate the process", and chose not to carry that pattern into the new standard.
+
+The idiomatic replacement is explicit and testable:
+
+```go
+logger.Error("unrecoverable state", slog.Any("err", err))
+os.Exit(1)
+```
+
+`Fatal` and `Panic` levels remain available through phuslu's `log.FatalLevel` and
+`log.PanicLevel` via `WithLevel` for cases where drop-in compatibility with existing
+infrastructure requires them.
+
+### `StackFrame` — filtered stack capture
+
+```go
+func StackFrame(skip int, targetPkgs ...string) string
+```
+
+Returns a formatted stack trace as a plain string. `skip=0` starts at the direct
+caller of `StackFrame`. Pass package prefixes to include only relevant frames; omit
+to capture the full stack:
+
+```go
+// full stack from caller
+lcl.StackFrame(0)
+
+// only frames in your own packages
+lcl.StackFrame(0, "github.com/acme/myapp", "github.com/acme/shared")
+```
+
+---
+
 ## Acknowledgements
 
 The slice and iterator utilities in this library are built on top of
