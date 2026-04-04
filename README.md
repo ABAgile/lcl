@@ -418,6 +418,102 @@ changed := Filter(pairs, func(p Tuple2[string, string]) bool {
 
 ---
 
+## db.go — PostgreSQL / pgx utilities
+
+### Pool construction
+
+```go
+func NewPgxPool(connStr string, opts ...DatabaseConfigOption) (*pgxpool.Pool, error)
+```
+
+Creates a `pgxpool.Pool` from a connection string. Options are applied to the parsed config before the pool is created.
+
+```go
+type DatabaseConfigOption func(*pgxpool.Config)
+```
+
+Functional option type for `NewPgxPool`.
+
+### Options
+
+```go
+func WithDecimalRegister() DatabaseConfigOption
+```
+
+Registers [`govalues/decimal`](https://github.com/govalues/decimal) with the pgx type map on every new connection, enabling transparent encode/decode of `decimal.Decimal` for PostgreSQL `numeric` columns.
+
+```go
+pool, err := lcl.NewPgxPool(connStr, lcl.WithDecimalRegister())
+```
+
+### Connection string sanitization
+
+```go
+func SantizeDbConn(connStr string) string
+```
+
+Strips `user=` and `password=` key-value pairs from a DSN and collapses surrounding whitespace. Safe for logging.
+
+```go
+lcl.SantizeDbConn("host=localhost user=admin password=secret dbname=app")
+// → "host=localhost dbname=app"
+```
+
+### Placeholder conversion
+
+```go
+func ConvertPgPlaceholders(sql string, args ...any) (string, []any, error)
+```
+
+Converts PostgreSQL-style positional placeholders (`$1`, `$2`, …) to `?` placeholders, reordering `args` to match. Useful when targeting drivers that use `?` syntax (e.g. MySQL, SQLite) while authoring queries in PostgreSQL style.
+
+```go
+sql, args, err := lcl.ConvertPgPlaceholders(
+    "SELECT * FROM orders WHERE user_id = $1 AND status = $2",
+    userID, status,
+)
+// sql  → "SELECT * FROM orders WHERE user_id = ? AND status = ?"
+// args → []any{userID, status}
+```
+
+Returns an error if a placeholder index is out of range or malformed. Positional args may be repeated (`$1` used twice maps the same argument into both positions).
+
+### Struct copy with dereferencing
+
+```go
+func CopyDeref[T any, U any](src T, dst *U) (*U, error)
+```
+
+Copies fields from `src` to `dst` by name, with three conversion rules applied in order:
+
+| Source type | Destination type | Behaviour |
+|---|---|---|
+| `[]byte` | `string` | Converts bytes to string |
+| `*T` | `T` | Dereferences pointer; zeroes dst field if nil |
+| `T` | `T` | Direct assignment if types are assignable |
+
+Fields with no matching name in `src`, unexported fields, and fields whose types don't satisfy any rule are silently skipped. `src` may itself be a pointer — it is dereferenced before field matching begins.
+
+```go
+type Row struct {
+    Name  []byte
+    Score *int
+    Tag   string
+}
+type Model struct {
+    Name  string
+    Score int
+    Tag   string
+}
+
+score := 42
+row := Row{Name: []byte("alice"), Score: &score, Tag: "vip"}
+model, err := lcl.CopyDeref(row, &Model{})
+// model → Model{Name: "alice", Score: 42, Tag: "vip"}
+```
+
+---
+
 ## Acknowledgements
 
 The slice and iterator utilities in this library are built on top of
