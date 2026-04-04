@@ -3,8 +3,21 @@ package lcl
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestNewPgxPool_InvalidConnStr(t *testing.T) {
+	_, err := NewPgxPool("not a valid connstr %%%")
+	assert.Error(t, err)
+}
+
+func TestWithDecimalRegister(t *testing.T) {
+	cfg := &pgxpool.Config{}
+	opt := WithDecimalRegister()
+	opt(cfg)
+	assert.NotNil(t, cfg.AfterConnect)
+}
 
 func TestSantizeDbConn(t *testing.T) {
 	testCases := []struct {

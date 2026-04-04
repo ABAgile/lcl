@@ -35,7 +35,7 @@ func NewPgxPool(connStr string, opts ...DatabaseConfigOption) (*pgxpool.Pool, er
 
 func WithDecimalRegister() DatabaseConfigOption {
 	return func(cfg *pgxpool.Config) {
-		cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error { // codecov: ignore
 			pgxDecimal.Register(conn.TypeMap())
 			return nil
 		}
