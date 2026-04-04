@@ -12,6 +12,16 @@ func TestNewPgxPool_InvalidConnStr(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestNewPgxPool_WithOptions(t *testing.T) {
+	// ParseConfig("") succeeds with defaults; pgxpool dials lazily so
+	// NewWithConfig succeeds and options are applied without a real DB.
+	pool, err := NewPgxPool("", WithDecimalRegister())
+	if pool != nil {
+		pool.Close()
+	}
+	assert.NoError(t, err)
+}
+
 func TestWithDecimalRegister(t *testing.T) {
 	cfg := &pgxpool.Config{}
 	opt := WithDecimalRegister()
